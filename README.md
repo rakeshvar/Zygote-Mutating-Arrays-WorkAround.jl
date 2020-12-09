@@ -4,14 +4,14 @@
 We use Julia's Zygote package to perform automatic code differentiation. But it does not work if you are differentiating code that is ‘mutating arrays’ somewhere. Here we present how to go around this problem in a couple of ways. Using a sample problem.
 
 ## The Problem
-We have a dynamical system that takes an input $x$, and has a state $a$. 
-Here both $x$ and $a$ are $n$-vectors.
-The update rule for $a$ at time $t$ is. 
-$$
-a_t = A a_{t-1} + x_t
-$$
+We have a dynamical system that takes an input `x`, and has a state `a`. 
+Here both `x` and `a` are `n`-vectors.
+The update rule for `a` at time `t` is. 
+```
+aₜ = A aₜ₋₁ + xₜ
+```
 
-$A$ a $m$-diagonal matrix of size $n\times n$, constructed as:
+`A` a `m`-diagonal matrix of size `n×n`, constructed as:
 
 
 ```julia
@@ -74,7 +74,7 @@ getA(3, 4)
 
 
 
-After $t$ time, the output is just $y = a_t[1]$.
+After `t` time, the output is just `y = aₜ[1]`.
 That is the first element of the state vector. 
 
 
@@ -95,8 +95,8 @@ function y(x, m; showstate=false)
 end;
 ```
 
-We represent the input $\{x_1, x_2, \cdots, x_t\}$ as the $n\times t$ matrix $X$.
-Now we want to find the gradient $\nabla_X y$, which is also an $n\times t$ matrix.
+We represent the input `{x₁, x₂, ⋯, xₜ}` as the `n×t` matrix `X`.
+Now we want to find the gradient `∇ₓ y`, which is also an `n×t` matrix.
 
 
 ```julia
@@ -144,7 +144,7 @@ y(X, 2, showstate=true)
 
 
 
-You can see here that the result is the first element of the final state. That is the top right element of the $a$'s matrix above. This value depends on the previous states, and through them on the input matrix $X$. Now we need to differentiate $y = a_t[1]$, with respect to (each element of) the matrix $X$.
+You can see here that the result is the first element of the final state. That is the top right element of the `a`'s matrix above. This value depends on the previous states, and through them on the input matrix `X`. Now we need to differentiate `y = aₜ[1]`, with respect to (each element of) the matrix `X`.
 
 
 ```julia
@@ -195,7 +195,7 @@ In function `y`, we are assigning to `aaa_[:, t] = ...`
 In function `getA`, we are assigning to `A[j, j+d] = ...`
 
 ## Ignoring
-Now we see that the recurrence realation matrix $A$ is a constant with respect to $y$. So we can just ask the `Zygote` to ignore the consturction of `A`. 
+Now we see that the recurrence realation matrix `A` is a constant with respect to `y`. So we can just ask the `Zygote` to ignore the consturction of `A`. 
 
 While we are at it, let us also optimize our function to not store intermediate states. And avoid assigning to  `aaa_[:, t] = ...`
 
@@ -247,7 +247,7 @@ a += x[:, t]
 
 So that we are not mutating a part of an array/matrix anywhere. 
 
-This works but is inefficient as for large sizes $n$, multipication by $A$ can be achieved in $O(n)$ time vs. $O(n^2)$ time as our current direct matrix multiplication does! So we make the function $y$ more efficient by avoiding the matrix $A$. Instead, we write code to update state without the multipication.
+This works but is inefficient as for large sizes `n`, multipication by `A` can be achieved in `O(n)` time vs. `O(n²)` time as our current direct matrix multiplication does! So we make the function `y` more efficient by avoiding the matrix `A`. Instead, we write code to update state without the multipication.
 
 
 ```julia
@@ -291,7 +291,7 @@ Xr = rand(1000, 10)
       54.092 μs (32 allocations: 246.08 KiB)
 
 
-Our new implementation works and (for $n=1000$) is nearly **150 times faster**! So the optimization is worth it. 
+Our new implementation works and (for `n=1000`) is nearly **150 times faster**! So the optimization is worth it. 
 
 Now let us try to differentiate it. We can already guess that `updatestate` is going to error as it is mutating the vector `aa`!
 
@@ -341,13 +341,13 @@ But we can not just `@ignore updatestate` because this operation does affect the
 
 ## The WorkAround
 We need to work around the 'mutating array' operation of `updatestate`. Since `Zygote` is unable to differentiate `updatestate` automatically, we do it ourself!
-This is simple as the derivative of $b = Aa$ is just $A^T$. So the chain rule is $\bar{a} = A^T\bar{b}$. Where $\bar{b}$ is the derivative of the final answer (here $y$) with respect to $b$, and similarly for $a$.
+This is simple as the derivative of `b = Aa` is just `Aᵀ`. So the chain rule is `ā= Aᵀ b̄`. Where `b̄` is the derivative of the final answer (here `y`) with respect to `b`, and similarly for `a`.
 
 We write the chain rule as a reverse rule using the `ChainRulesCore` package.
 
 The `rrule` function takes the same arguments as the original function `updatestate`, i.e. `a`, `m`. It calculates the actual ‘forward’ value which is just `update(a, m)`, and along with it returns the ‘pullback’ function. 
 
-For a given `a` and `m`, the pullback function takes the derivative w.r.to the new state $\bar{a}$ and returns the derivative w.r.to the old state $\bar{b}$, thus implementing the chainrule in reverse. 
+For a given `a` and `m`, the pullback function takes the derivative w.r.to the new state `ā` and returns the derivative w.r.to the old state `b̄`, thus implementing the chainrule in reverse. 
 
 (For some unknown reason, I am having to redefine `updatestate`. This is not needed if you are not working at a REPL.)
 
